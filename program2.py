@@ -126,6 +126,136 @@ def evaluate_polarities(dataset):
     return dataset, precision, recall
 
 
+
+
+def analyze_sentiment_nsubj_cop(text, aspect_terms):
+    doc = nlp(text)
+
+    # Initialize sentiment scores for each aspect term
+    sentiment_scores = {term: 0 for term in aspect_terms}
+
+    for token in doc:
+        # Check if the token is an aspect term
+        if token.text in aspect_terms:
+            aspect_term = token.text
+
+            # Analyze sentiment based on the token's children and dependencies
+            for child in token.children:
+                # Rule: If the aspect term's child has dependency type "nsubj" and the grandchild is a copular verb (cop)
+                # followed by an adjective (amod), then assign sentiment accordingly.
+                if child.dep_ == "nsubj" and child.pos_ == "NOUN":
+                    for grandchild in child.children:
+                        if grandchild.dep_ == "cop" and grandchild.pos_ == "AUX":
+                            for adj in grandchild.children:
+                                if adj.dep_ == "amod" and adj.pos_ == "ADJ":
+                                    if adj.text.lower() in positive_words:
+                                        sentiment_scores[aspect_term] += 1
+                                    elif adj.text.lower() in negative_words:
+                                        sentiment_scores[aspect_term] -= 1
+
+    # Determine sentiment polarities based on the sentiment scores
+    sentiment_polarities = {
+        term: "positive" if score > 0 else "neutral" if score == 0 else "negative"
+        for term, score in sentiment_scores.items()
+    }
+
+    return sentiment_polarities
+
+
+
+
+def analyze_sentiment_amod_nsubj(text, aspect_terms):
+    doc = nlp(text)
+
+    # Initialize sentiment scores for each aspect term
+    sentiment_scores = {term: 0 for term in aspect_terms}
+
+    for token in doc:
+        # Check if the token is an aspect term
+        if token.text in aspect_terms:
+            aspect_term = token.text
+
+            # Analyze sentiment based on the token's children and dependencies
+            for child in token.children:
+                # Rule: If the aspect term's child is a positive word from the opinion_lexicon
+                # with dependency type "amod", then the sentiment towards the aspect term is positive.
+                if child.text.lower() in positive_words and child.dep_ == "amod":
+                    sentiment_scores[aspect_term] += 1
+
+                # Rule: If the aspect term's child is a negative word from the opinion_lexicon
+                # with dependency type "amod", then the sentiment towards the aspect term is negative.
+                elif child.text.lower() in negative_words and child.dep_ == "amod":
+                    sentiment_scores[aspect_term] -= 1
+
+                # Rule: If the aspect term's child has dependency type "amod" but is not a positive or negative word,
+                # then check if the grandchild is a noun subject (nsubj) and assign sentiment accordingly.
+                elif child.dep_ == "amod":
+                    for grandchild in child.children:
+                        if grandchild.dep_ == "nsubj" and grandchild.pos_ == "NOUN":
+                            if child.text.lower() in positive_words:
+                                sentiment_scores[aspect_term] += 1
+                            elif child.text.lower() in negative_words:
+                                sentiment_scores[aspect_term] -= 1
+
+    # Determine sentiment polarities based on the sentiment scores
+    sentiment_polarities = {
+        term: "positive" if score > 0 else "neutral" if score == 0 else "negative"
+        for term, score in sentiment_scores.items()
+    }
+
+    return sentiment_polarities
+
+
+
+
+def analyze_sentiment_last(text, aspect_terms):
+    doc = nlp(text)
+
+    # Initialize sentiment scores for each aspect term
+    sentiment_scores = {term: 0 for term in aspect_terms}
+
+    for token in doc:
+        # Check if the token is an aspect term
+        if token.text in aspect_terms:
+            aspect_term = token.text
+
+            # Analyze sentiment based on the token's children and dependencies
+            for child in token.children:
+                # Rule: If the aspect term's child is an adverb and has dependency type "advmod",
+                # then it modifies the sentiment of the aspect term.
+                if child.pos_ == "ADV" and child.dep_ == "advmod":
+                    modifier = child.text.lower()
+
+                    # Increment or decrement sentiment score based on the adverb's sentiment modifier
+                    if modifier in positive_words:
+                        sentiment_scores[aspect_term] += 1
+                    elif modifier in negative_:
+                        sentiment_scores[aspect_term] -= 1
+
+                # Rule: If the aspect term's child is a positive or negative word from the opinion_lexicon
+                # with dependency type "amod", then the sentiment towards the aspect term is modified accordingly.
+                elif child.text in positive_words and child.dep_ == "amod":
+                    sentiment_scores[aspect_term] += 1
+                elif child.text in negative_words and child.dep_ == "amod":
+                    sentiment_scores[aspect_term] -= 1
+
+                # Rule: If the aspect term's child has dependency type "amod" but is not a positive or negative word,
+                # then the sentiment towards the aspect term is neutral.
+                elif child.dep_ == "amod":
+                    sentiment_scores[aspect_term] += 0
+
+            # Check for negation in the sentence and reverse sentiment if applicable
+            for ancestor in token.ancestors:
+                if ancestor.text.lower() in negative_words:
+                    sentiment_scores[aspect_term] *= -1
+
+    # Determine sentiment polarities based on the sentiment scores
+    sentiment_polarities = {
+        term: "positive" if score > 0 else "neutral" if score == 0 else "negative"
+        for term, score in sentiment_scores.items()
+    }
+
+    return sentiment_polarities
 #-----tesing Anzalyze -----
 
 def test1(dataset):
@@ -148,17 +278,91 @@ def test1(dataset):
     return dataset
 
 
+
+
+#-----tesing Anzalyze -----
+
+def test2(dataset):
+    # Initialize counters for precision and recall calculation
+    
+
+    for sentence_id, data in dataset.items():
+        text = data['text']
+        aspect_terms = [aspect['term'] for aspect in data['aspect_terms']]
+        sentiment_polarities = analyze_sentiment_nsubj_cop(text, aspect_terms)
+        polarities = {aspect['term']: aspect['polarity'] for aspect in data['aspect_terms']}
+
+        print(sentiment_polarities)
+
+        # Store the predicted polarities in the dataset
+        dataset[sentence_id]['predicted_polarities'] = sentiment_polarities
+
+   
+
+    return dataset
+
+
+
+
+#-----tesing Anzalyze -----
+
+def test3(dataset):
+    # Initialize counters for precision and recall calculation
+    
+
+    for sentence_id, data in dataset.items():
+        text = data['text']
+        aspect_terms = [aspect['term'] for aspect in data['aspect_terms']]
+        sentiment_polarities = analyze_sentiment_amod_nsubj(text, aspect_terms)
+        polarities = {aspect['term']: aspect['polarity'] for aspect in data['aspect_terms']}
+
+        print(sentiment_polarities)
+
+        # Store the predicted polarities in the dataset
+        dataset[sentence_id]['predicted_polarities'] = sentiment_polarities
+
+   
+
+    return dataset
+
+
+
+
+def test4(dataset):
+    # Initialize counters for precision and recall calculation
+    
+
+    for sentence_id, data in dataset.items():
+        text = data['text']
+        aspect_terms = [aspect['term'] for aspect in data['aspect_terms']]
+        sentiment_polarities = analyze_sentiment_last(text, aspect_terms)
+        polarities = {aspect['term']: aspect['polarity'] for aspect in data['aspect_terms']}
+
+        print(sentiment_polarities)
+
+        # Store the predicted polarities in the dataset
+        dataset[sentence_id]['predicted_polarities'] = sentiment_polarities
+
+   
+
+    return dataset
 # -------------Main--------------
 
 # Usage example
-file_path = 'rest.xml'
+file_path = 'Restaurants.xml'
 dataset = load_data(file_path)
 
 
 # Evaluate polarities and calculate precision and recall
-test1(dataset)
+# test1(dataset)
+# print("next")
+# test2(dataset)
+# print("next")
+# test3(dataset)
+print("next")
+test4(dataset)
 
-print(negative_words)
+
 
 # Print precision and recall
 # print(f"Precision: {precision}")
