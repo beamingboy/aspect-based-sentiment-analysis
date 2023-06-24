@@ -21,7 +21,7 @@ def load_data(path):
     tree = XET.parse(path)
     root = tree.getroot()
     dataset = {}
-    ground_truth = {}
+    
 
     for sentence_elem in root.iter('sentence'):
         sentence_id = sentence_elem.attrib['id']
@@ -39,20 +39,15 @@ def load_data(path):
                     'polarity': polarity
                 })
 
-        aspectCategory = sentence_elem.find('aspectCategories/aspectCategory')
-        if aspectCategory is not None:
-            ground_truth_label = aspectCategory.attrib['polarity']
-        else:
-            ground_truth_label = 'neutral'
-
         if aspectTerms:
             dataset[sentence_id] = {
                 'text': text,
-                'aspect_terms': aspectTerms
+                'aspect_terms': aspectTerms,
+                'predictions': {}
             }
-            ground_truth[sentence_id] = ground_truth_label
+            
 
-    return dataset, ground_truth
+    return dataset
 
 
 
@@ -96,97 +91,75 @@ def analyze_sentiment_rules(text, aspect_terms):
 
     return sentiment_polarities
 
-
-def determine_sentence_sentiment(sentiment_polarities):
-    positive_count = 0
-    negative_count = 0
-    neutral_count = 0
-
-    for polarity in sentiment_polarities.values():
-        if polarity == "positive":
-            positive_count += 1
-        elif polarity == "negative":
-            negative_count += 1
-        elif polarity == "neutral":
-            neutral_count += 1
-
-    if positive_count > negative_count and positive_count > neutral_count:
-        return "positive"
-    elif negative_count > positive_count and negative_count > neutral_count:
-        return "negative"
-    elif neutral_count > positive_count and neutral_count > negative_count:
-        return "neutral"
     
     
-def analyze_sentiments(dataset):
-    predictions = {}
+# Function to calculate precision and recall
+def calculate_precision_recall(dataset):
+    correct_prediction = {
+        'positive': 0,
+        'negative': 0,
+        'neutral': 0
+    }
+    total_prediction = {
+        'positive': 0,
+        'negative': 0,
+        'neutral': 0
+    }
+    total_ground_truth = {
+        'positive': 0,
+        'negative': 0,
+        'neutral': 0
+    }
 
     for sentence_id, data in dataset.items():
-        text = data['text']
-        aspect_terms = [term['term'] for term in data['aspect_terms']]
+        aspect_terms = data['aspect_terms']
+        predictions = data['predictions']
 
-        sentiment_polarities = analyze_sentiment_rules(text, aspect_terms)
-        sentence_sentiment = determine_sentence_sentiment(sentiment_polarities)
+        for aspect_term in aspect_terms:
+            if aspect_term['term'] in predictions:
+                predicted_polarity = predictions[aspect_term['term']]
+                ground_truth_polarity = aspect_term['polarity']
 
-        predictions[sentence_id] = sentence_sentiment
+                if predicted_polarity == ground_truth_polarity:
+                    correct_prediction[ground_truth_polarity] += 1
+                total_prediction[predicted_polarity] += 1
+                total_ground_truth.setdefault(ground_truth_polarity, 0)
+                total_ground_truth[ground_truth_polarity] += 1
 
-    return predictions
+    precision = {
+        'positive': (correct_prediction['positive'] / total_prediction['positive']) * 100,
+        'negative': (correct_prediction['negative'] / total_prediction['negative']) * 100,
+        'neutral': (correct_prediction['neutral'] / total_prediction['neutral']) * 100
+    }
 
+    recall = {
+        'positive': (correct_prediction['positive'] / total_ground_truth['positive']) * 100,
+        'negative': (correct_prediction['negative'] / total_ground_truth['negative']) * 100,
+        'neutral': (correct_prediction['neutral'] / total_ground_truth['neutral']) * 100
+    }
 
-def calculate_precision(predictions, ground_truth, sentiment_category):
-    true_positives = 0
-    positive_count = 0
+    return precision, recall
 
-    for sentence_id, prediction in predictions.items():
-        if prediction == sentiment_category:
-            positive_count += 1
-            if prediction == ground_truth[sentence_id]:
-                true_positives += 1
-
-    precision = (true_positives / positive_count) * 100 if positive_count > 0 else 0.0
-    return precision
-
-
-
-def calculate_recall(predictions, ground_truth, sentiment_category):
-    true_positives = 0
-    positive_sentences = 0
-
-    for sentence_id, prediction in predictions.items():
-        if ground_truth[sentence_id] == sentiment_category:
-            positive_sentences += 1
-            if prediction == sentiment_category:
-                true_positives += 1
-
-    if positive_sentences == 0:
-        recall = 0.0
-    else:
-        recall = (true_positives / positive_sentences) * 100
-
-    return recall
 
 
     # Step 1: Load the dataset
-dataset, ground_truth = load_data('Restaurants.xml')
+dataset= load_data('Restaurants.xml')
 
 # Analyze sentiments and store predictions
-predictions = analyze_sentiments(dataset)
-positive_precision = calculate_precision(predictions, ground_truth, "positive")
-negative_precision = calculate_precision(predictions, ground_truth, "negative")
-neutral_precision = calculate_precision(predictions, ground_truth, "neutral")
+for sentence_id, data in dataset.items():
+    text = data['text']
+    aspect_terms = [term['term'] for term in data['aspect_terms']]
+    predictions = analyze_sentiment_rules(text, aspect_terms)
+    data['predictions'] = predictions
 
-print("Positive Precision:", positive_precision)
-print("Negative Precision:", negative_precision)
-print("Neutral Precision:", neutral_precision)
+precision, recall = calculate_precision_recall(dataset)
 
+print("Precision:")
+print("Positive:", precision['positive'])
+print("Negative:", precision['negative'])
+print("Neutral:", precision['neutral'])
 
-
-
-positive_recall = calculate_recall(predictions, ground_truth, "positive")
-negative_recall = calculate_recall(predictions, ground_truth, "negative")
-neutral_recall = calculate_recall(predictions, ground_truth, "neutral")
-
-print("Positive Recall:", positive_recall)
-print("Negative Recall:", negative_recall)
-print("Neutral Recall:", neutral_recall)
-# print("Recall:", recall)
+print("Recall:")
+print("Positive:", recall['positive'])
+print("Negative:", recall['negative'])
+print("Neutral:", recall['neutral'])
